@@ -1,0 +1,88 @@
+```{r, include = FALSE}
+library(palmerpenguins)
+library(ggplot2)
+library(janitor)
+library(dplyr)
+library(ragg)
+library(svglite)
+```
+
+
+```{r, include = FALSE}
+# Here, I'm going to create all the functions that I will use later on
+# First, I'm cleaning the penguin data first up to get it ready for statistical tests
+cleaning <- function(penguins_raw){
+  penguins_raw %>%
+    select(Species, `Flipper Length (mm)`) %>% 
+    filter(Species != 'Gentoo penguin (Pygoscelis papua)') %>% 
+    remove_empty(c("rows", "cols")) %>%
+    clean_names()
+}
+
+# Subsetting the data to remove any empty values (NA) of flipper length
+remove_empty_flipper_length <- function(penguins_clean){
+  penguins_clean %>% 
+    filter(!is.na(flipper_length_mm)) 
+}
+
+# T test function to look at statistical difference between the average flipper length between the Adelie and Chinstrap penguin
+flipper_length_summary <- function(penguins_clean){
+  group_by(penguins_clean, species) %>% 
+    summarise(count = n(),
+              mean = mean(flipper_length_mm),
+              sd = sd(flipper_length_mm))
+}
+
+# Plotting the Flipper length of Adelie and Chinstrap penguins as a histogram
+plot_flipper_histogram <- function(penguins_clean){
+  penguins_clean %>% 
+    ggplot(aes(x = flipper_length_mm, colour = species)) +
+  geom_histogram(fill="white", alpha=0.5, position="identity") + 
+    geom_vline(data = summary_penguins, aes(xintercept=mean, color=species),
+             linetype="dashed") +
+  scale_colour_discrete(name = "Species", labels = c("Adelie", "Chinstrap")) +
+  labs(title = "Histogram of Flipper Length by Species", subtitle = "Dotted line showing mean of each species", 
+       x = "Flipper Length (mm)", y = "Number of Penguins") +
+    theme_bw()
+}
+```
+
+```{r, include = FALSE}
+penguins_clean <- remove_empty_flipper_length(cleaning(penguins_raw))
+```
+
+
+```{r, message = FALSE}
+# Running a T test on the average culmen length between the Adelie and Chinstrap penguin to see if there is a significant difference. The null hypothesis is that there is no significant difference in the mean of Adelie and Chinstrap penguin's flipper lengths. There are three assumptions that we need to check before we can carry out the T test. 
+
+# The first assumption is whether the two samples are independent. Adelie and Chinstrap are two different species of penguin so are therefore independent
+
+# Second assumption is normality which we can test for using the Shapiro-Wilk test 
+with(penguins_clean, shapiro.test(flipper_length_mm[species == "Adelie Penguin (Pygoscelis adeliae)"]))
+with(penguins_clean, shapiro.test(flipper_length_mm[species == "Chinstrap penguin (Pygoscelis antarctica)"]))
+# The two p-values are greater than the significance level 0.05 implying that the distribution of the data are not significantly different from the normal distribution. In other words, we can assume the normality.
+
+# The third and final assumption is do the two populations have the same variance. The F-test can be used to test for homogeneity in variances
+res.ftest <- var.test(flipper_length_mm ~ species, data = penguins_clean)
+res.ftest
+# The p-value of F-test is p = 0.3854 which is greater than the significance level alpha = 0.05. There is therefore no significant difference between the two variances of the two sets of data so we are able to use a t-test.
+
+res <- t.test(flipper_length_mm ~ species, data = penguins_clean, var.equal = TRUE)
+res
+# The p-value of the T-test is 9.379e-09. Since this is less than the significance level alpha = 0.05, we can reject the null hypothesis and determine there is a significant difference between Adelie and Chinstrap penguin's flipper lengths.
+```
+
+```{r, echo = FALSE}
+# Create the summary dataset
+summary_penguins <- flipper_length_summary(penguins_clean)
+# Plot the flipper length as a histogram of Adelie and Chinstrap penguins
+flipper_histogram <- plot_flipper_histogram(penguins_clean)
+flipper_histogram
+```
+
+```{r, include = FALSE}
+# This saves the plot as a vector
+svglite("figures/fig01_30x30_poster.svg", width = 8, height = 8, scaling = 1)
+flipper_histogram
+dev.off()
+```
